@@ -118,7 +118,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Usage:")
 	fmt.Fprintln(w, "  morningweave <command> [options]")
-	fmt.Fprintln(w, "  morningweave --version")
+	fmt.Fprintln(w, "  morningweave -v | --version")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Commands:")
 	for _, cmd := range commands {

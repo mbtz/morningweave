@@ -37,7 +37,8 @@ func printCompletionUsage(w io.Writer) {
 }
 
 func bashCompletionScript() string {
-	return `# bash completion for morningweave
+	commandList := strings.Join(commands, " ")
+	return fmt.Sprintf(`# bash completion for morningweave
 _morningweave_complete() {
   local cur prev words cword
   if type _init_completion >/dev/null 2>&1; then
@@ -49,10 +50,14 @@ _morningweave_complete() {
     prev="${COMP_WORDS[COMP_CWORD-1]}"
   fi
 
-  local commands="init add-platform config completion set-tags set-category run start stop status logs test-email auth cron version"
+  local commands="%s"
   local config_subcommands="edit"
   local auth_subcommands="set get clear"
 
+  if [[ "${cur}" == -* ]]; then
+    COMPREPLY=( $(compgen -W "-h --help -v --version" -- "${cur}") )
+    return
+  fi
   if [[ $cword -eq 1 ]]; then
     COMPREPLY=( $(compgen -W "${commands}" -- "${cur}") )
     return
@@ -113,7 +118,7 @@ _morningweave_complete() {
 }
 
 complete -F _morningweave_complete morningweave
-`
+`, commandList)
 }
 
 func zshCompletionScript() string {
@@ -125,8 +130,9 @@ source <(morningweave completion bash)
 }
 
 func fishCompletionScript() string {
-	return `# fish completion for morningweave
-complete -c morningweave -f -n "__fish_use_subcommand" -a "init add-platform config completion set-tags set-category run start stop status logs test-email auth cron version"
+	commandList := strings.Join(commands, " ")
+	return fmt.Sprintf(`# fish completion for morningweave
+complete -c morningweave -f -n "__fish_use_subcommand" -a "%s"
 
 complete -c morningweave -f -n "__fish_seen_subcommand_from config" -a "edit"
 complete -c morningweave -f -n "__fish_seen_subcommand_from auth" -a "set get clear"
@@ -151,5 +157,8 @@ complete -c morningweave -l weight -d "Weight override" -n "__fish_seen_subcomma
 complete -c morningweave -l ref -d "Secret reference" -n "__fish_seen_subcommand_from auth set"
 complete -c morningweave -l value -d "Secret value" -n "__fish_seen_subcommand_from auth set"
 complete -c morningweave -l stdin -d "Read secret from stdin" -n "__fish_seen_subcommand_from auth set"
-`
+
+complete -c morningweave -s h -l help -d "Show help"
+complete -c morningweave -s v -l version -d "Show version"
+`, commandList)
 }
