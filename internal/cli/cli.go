@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"os/signal"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -29,14 +29,17 @@ import (
 	"morningweave/internal/scheduler"
 	"morningweave/internal/secrets"
 	"morningweave/internal/storage"
-	"morningweave/internal/todo"
 )
 
 type handler func(args []string) int
 
+var Version = "dev"
+
 var commands = []string{
 	"init",
 	"add-platform",
+	"config",
+	"completion",
 	"set-tags",
 	"set-category",
 	"run",
@@ -47,6 +50,7 @@ var commands = []string{
 	"test-email",
 	"auth",
 	"cron",
+	"version",
 }
 
 type platformSpec struct {
@@ -71,10 +75,17 @@ func Run(args []string) int {
 	case "-h", "--help", "help":
 		printUsage(os.Stdout)
 		return 0
+	case "-v", "--version", "version":
+		fmt.Fprintln(os.Stdout, Version)
+		return 0
 	case "init":
 		return cmdInit(args[1:])
 	case "add-platform":
 		return cmdAddPlatform(args[1:])
+	case "config":
+		return cmdConfig(args[1:])
+	case "completion":
+		return cmdCompletion(args[1:])
 	case "set-tags":
 		return cmdSetTags(args[1:])
 	case "set-category":
@@ -107,6 +118,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Usage:")
 	fmt.Fprintln(w, "  morningweave <command> [options]")
+	fmt.Fprintln(w, "  morningweave --version")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Commands:")
 	for _, cmd := range commands {
@@ -282,6 +294,61 @@ func cmdAddPlatform(args []string) int {
 	return 0
 }
 
+func cmdConfig(args []string) int {
+	if len(args) == 0 {
+		printConfigUsage(os.Stdout)
+		return 2
+	}
+	switch args[0] {
+	case "-h", "--help", "help":
+		printConfigUsage(os.Stdout)
+		return 0
+	case "edit":
+		return cmdConfigEdit(args[1:])
+	default:
+		fmt.Fprintf(os.Stderr, "unknown config command: %s\n", args[0])
+		printConfigUsage(os.Stderr)
+		return 2
+	}
+}
+
+func cmdConfigEdit(args []string) int {
+	fs := flag.NewFlagSet("config edit", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	configPath := fs.String("config", scaffold.DefaultConfigFilename, "Path to config file (default: config.yaml).")
+
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			printConfigEditUsage(os.Stdout, fs)
+			return 0
+		}
+		fmt.Fprintf(os.Stderr, "failed to parse flags: %v\n", err)
+		printConfigEditUsage(os.Stderr, fs)
+		return 2
+	}
+
+	if _, err := os.Stat(*configPath); err != nil {
+		if os.IsNotExist(err) {
+			fmt.Fprintf(os.Stderr, "Config file not found: %s. Run `morningweave init` first.\n", *configPath)
+			return 1
+		}
+		fmt.Fprintf(os.Stderr, "failed to stat config: %v\n", err)
+		return 1
+	}
+
+	editor := selectEditor()
+	command := fmt.Sprintf("%s %s", editor, shellEscape(*configPath))
+	cmd := exec.Command("sh", "-c", command)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to launch editor: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
 func cmdSetTags(args []string) int {
 	return cmdSetLabel(args, "tags")
 }
@@ -346,7 +413,6 @@ func cmdStatus(args []string) int {
 			fmt.Fprintf(os.Stdout, "  - %s\n", warning)
 		}
 	}
-	updateUserTodo(*configPath, typedCfg)
 
 	storagePath := scaffold.DefaultStoragePath
 	if storageSection, ok := coerceStringMap(cfgMap["storage"]); ok {
@@ -908,8 +974,6 @@ func cmdRun(args []string) int {
 		}
 	}
 
-	updateUserTodo(*configPath, cfg)
-
 	result, err := runner.RunOnce(context.Background(), cfg, runner.RunOptions{Scope: scope})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "run failed: %v\n", err)
@@ -1187,17 +1251,6 @@ func collectStatusWarnings(cfg config.Config) []string {
 	}
 
 	return warnings
-}
-
-func updateUserTodo(configPath string, cfg config.Config) {
-	if strings.TrimSpace(configPath) == "" {
-		return
-	}
-	todoPath := filepath.Join(filepath.Dir(configPath), scaffold.DefaultUserTodoFilename)
-	missing := todo.CollectMissing(cfg)
-	if err := todo.UpdateMissingSection(todoPath, cfg.Email.Provider, missing); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to update USER_TODO.md: %v\n", err)
-	}
 }
 
 func appendSecretWarning(warnings []string, label string, ref string, store secrets.Store) []string {
@@ -1721,6 +1774,25 @@ func cmdSetLabel(args []string, labelKey string) int {
 func printAddPlatformUsage(w io.Writer, fs *flag.FlagSet) {
 	fmt.Fprintln(w, "Usage: morningweave add-platform [options] <name>")
 	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "See docs/platform-setup.md for step-by-step key setup.")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Options:")
+	fs.SetOutput(w)
+	fs.PrintDefaults()
+}
+
+func printConfigUsage(w io.Writer) {
+	fmt.Fprintln(w, "Usage: morningweave config <command> [options]")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Commands:")
+	fmt.Fprintln(w, "  edit    Open config.yaml in your terminal editor")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Run `morningweave config <command> --help` for command-specific options.")
+}
+
+func printConfigEditUsage(w io.Writer, fs *flag.FlagSet) {
+	fmt.Fprintln(w, "Usage: morningweave config edit [options]")
+	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Options:")
 	fs.SetOutput(w)
 	fs.PrintDefaults()
@@ -1788,6 +1860,8 @@ func printCronUsage(w io.Writer, fs *flag.FlagSet) {
 
 func printAuthUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: morningweave auth <set|get|clear> [options] <platform|email>")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "See docs/platform-setup.md for step-by-step key setup.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Targets:")
 	fmt.Fprintln(w, "  email, reddit, x, instagram, hn")
@@ -1997,6 +2071,23 @@ func dedupeStrings(items []string) []string {
 		result = append(result, item)
 	}
 	return result
+}
+
+func selectEditor() string {
+	if editor := strings.TrimSpace(os.Getenv("EDITOR")); editor != "" {
+		return editor
+	}
+	if editor := strings.TrimSpace(os.Getenv("VISUAL")); editor != "" {
+		return editor
+	}
+	return "vi"
+}
+
+func shellEscape(value string) string {
+	if value == "" {
+		return "''"
+	}
+	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
 }
 
 func validateSchedule(value string) bool {

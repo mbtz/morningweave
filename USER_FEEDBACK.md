@@ -1,0 +1,5 @@
+- USER_TODO.md got used as part of the program itself, that wasn't needed. USER_TODO is for tasks needed to be done during development. Remove the need for that usage during end user use.
+- The cli tool should be installed and configured from homebrew.
+- Give step by step guides on how to add the platforms and how to obtain the necessary keys.
+- Add auto completion for any command
+- Add command for morningweave config edit to open the config file in the terminal default editor for easy access to the config.

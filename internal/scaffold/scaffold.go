@@ -10,10 +10,9 @@ import (
 )
 
 const (
-	DefaultConfigFilename   = "config.yaml"
-	DefaultUserTodoFilename = "USER_TODO.md"
-	DefaultEmailProvider    = "resend"
-	DefaultStoragePath      = "data/morningweave.db"
+	DefaultConfigFilename = "config.yaml"
+	DefaultEmailProvider  = "resend"
+	DefaultStoragePath    = "data/morningweave.db"
 )
 
 var validEmailProviders = map[string]struct{}{
@@ -121,53 +120,6 @@ storage:
   seen_retention_days: 45
 `
 
-const userTodoTemplate = `# MorningWeave USER_TODO
-
-This file is auto-maintained by {{BACKTICK}}morningweave init{{BACKTICK}}.
-Selected email provider: {{EMAIL_PROVIDER}}
-
-## Email provider: Resend
-- [ ] Create a Resend account and verify sender domain.
-- [ ] Create a Resend API key.
-- [ ] Store the key in the keychain or 1Password.
-- [ ] Update config.yaml {{BACKTICK}}email.resend.api_key_ref{{BACKTICK}} to match the stored key reference.
-- [ ] Run {{BACKTICK}}morningweave test-email{{BACKTICK}} once configured.
-
-## Email provider: SMTP
-- [ ] Collect SMTP host, port, username, and password.
-- [ ] Store the SMTP password in the keychain or 1Password.
-- [ ] Update config.yaml {{BACKTICK}}email.smtp{{BACKTICK}} settings and {{BACKTICK}}email.smtp.password_ref{{BACKTICK}}.
-- [ ] Run {{BACKTICK}}morningweave test-email{{BACKTICK}} once configured.
-
-## Reddit
-- [ ] Create a Reddit app (script) at https://www.reddit.com/prefs/apps.
-- [ ] Capture client id, client secret, and user agent.
-- [ ] Required OAuth scopes: read.
-- [ ] Store the secrets in the keychain or 1Password.
-- [ ] Update config.yaml {{BACKTICK}}platforms.reddit.credentials_ref{{BACKTICK}}.
-
-## X (x.com)
-- [ ] Create an app in the X developer portal and note the tier limits.
-- [ ] Generate the required API keys/tokens.
-- [ ] Required scopes: tweet.read, users.read.
-- [ ] Store the secrets in the keychain or 1Password.
-- [ ] Update config.yaml {{BACKTICK}}platforms.x.credentials_ref{{BACKTICK}}.
-
-## Instagram
-- [ ] Ensure the Instagram account is Business or Creator and linked to a Facebook Page/app.
-- [ ] Enable Instagram Graph API on the Facebook app and generate an access token.
-- [ ] Required scopes: instagram_basic, pages_show_list, instagram_manage_insights.
-- [ ] Store the token in the keychain or 1Password.
-- [ ] Update config.yaml {{BACKTICK}}platforms.instagram.credentials_ref{{BACKTICK}}.
-
-## Hacker News
-- [ ] No API key required. Configure sources under {{BACKTICK}}platforms.hn.sources{{BACKTICK}}.
-
-## Security
-- [ ] Prefer keychain or 1Password for secrets; avoid plaintext YAML secrets.
-- [ ] If you must use plaintext, store under {{BACKTICK}}secrets.values{{BACKTICK}} and reference via {{BACKTICK}}secrets:<key>{{BACKTICK}}.
-`
-
 type InitResult struct {
 	Created []string
 	Skipped []string
@@ -194,15 +146,8 @@ func DefaultConfigYAML(emailProvider string) string {
 	return strings.ReplaceAll(output, "{{BACKTICK}}", "`")
 }
 
-func DefaultUserTodo(emailProvider string) string {
-	provider := NormalizeEmailProvider(emailProvider)
-	output := strings.ReplaceAll(userTodoTemplate, "{{EMAIL_PROVIDER}}", provider)
-	return strings.ReplaceAll(output, "{{BACKTICK}}", "`")
-}
-
 func InitWorkspace(configPath string, emailProvider string, overwrite bool) (InitResult, error) {
 	provider := NormalizeEmailProvider(emailProvider)
-	todoPath := filepath.Join(filepath.Dir(configPath), DefaultUserTodoFilename)
 
 	result := InitResult{}
 
@@ -214,16 +159,6 @@ func InitWorkspace(configPath string, emailProvider string, overwrite bool) (Ini
 		result.Created = append(result.Created, configPath)
 	} else {
 		result.Skipped = append(result.Skipped, configPath)
-	}
-
-	created, err = writeFile(todoPath, DefaultUserTodo(provider), overwrite)
-	if err != nil {
-		return result, err
-	}
-	if created {
-		result.Created = append(result.Created, todoPath)
-	} else {
-		result.Skipped = append(result.Skipped, todoPath)
 	}
 
 	dbPath := filepath.Join(filepath.Dir(configPath), DefaultStoragePath)
