@@ -2,10 +2,12 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+tap_repo="$repo_root/tap"
 cd "$repo_root"
 
 cli_file="$repo_root/internal/cli/cli.go"
-formula_file="$repo_root/Formula/morningweave.rb"
+formula_file_rel="Formula/morningweave.rb"
+formula_file="$tap_repo/$formula_file_rel"
 
 die() {
   echo "error: $*" >&2
@@ -31,8 +33,12 @@ fi
 if [[ -n "$(git status --porcelain)" ]]; then
   die "working tree is dirty; commit or stash before running"
 fi
+if [[ -n "$(git -C "$tap_repo" status --porcelain)" ]]; then
+  die "tap repo is dirty; commit or stash before running"
+fi
 
 branch="$(git rev-parse --abbrev-ref HEAD)"
+tap_branch="$(git -C "$tap_repo" rev-parse --abbrev-ref HEAD)"
 tag="v${new_version}"
 
 info "Bumping CLI version to ${new_version}"
@@ -62,8 +68,8 @@ perl -0pi -e "s|^  url \".*\"|  url \"${tarball_url}\"|m" "$formula_file"
 perl -0pi -e "s/^  sha256 \".*\"/  sha256 \"${sha}\"/m" "$formula_file"
 perl -0pi -e "s/^  version \".*\"/  version \"${new_version}\"/m" "$formula_file"
 
-git add "$formula_file"
-git commit -m "Update Homebrew formula for ${tag}"
-git push origin "$branch"
+git -C "$tap_repo" add "$formula_file_rel"
+git -C "$tap_repo" commit -m "Update Homebrew formula for ${tag}"
+git -C "$tap_repo" push origin "$tap_branch"
 
 info "Done. Updated formula sha256: ${sha}"

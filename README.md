@@ -127,7 +127,7 @@ morningweave completion fish > ~/.config/fish/completions/morningweave.fish
 You can run `./scripts/update-version.sh` to automate the steps below.
 
 0) Bump the version you want to release (optional but recommended):
-   - Update `Formula/morningweave.rb` (`version` + `url` tag).
+   - Update `tap/Formula/morningweave.rb` (`version` + `url` tag).
    - If you want `morningweave --version` to show the release by default, update `internal/cli/cli.go` (`Version`).
 
 1) Create an annotated tag and push it:
@@ -139,11 +139,11 @@ git push origin v1.0.0
 ```sh
 curl -L https://github.com/mbtz/morningweave/archive/refs/tags/v1.0.0.tar.gz | shasum -a 256
 ```
-Paste the checksum into `Formula/morningweave.rb` (`sha256`) and confirm `version`/`url` match.
+Paste the checksum into `tap/Formula/morningweave.rb` (`sha256`) and confirm `version`/`url` match.
 
 3) Commit the formula update and push:
 ```sh
-git add Formula/morningweave.rb
-git commit -m "Update Homebrew formula for v1.0.0"
-git push
+git -C tap add Formula/morningweave.rb
+git -C tap commit -m "Update Homebrew formula for v1.0.0"
+git -C tap push
 ```
