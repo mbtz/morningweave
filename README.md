@@ -4,9 +4,9 @@ MorningWeave is a single-user CLI that builds a scheduled content digest from of
 The Go CLI is the source of truth. Legacy Python packaging has been removed; use git history if needed.
 
 ## Quick start
-- Build: `go build ./cmd/morningweave`
-- Help: `./morningweave --help`
-- Init config and USER_TODO: `./morningweave init`
+- Install to PATH: `./scripts/install.sh` (or `go install ./cmd/morningweave`)
+- Help: `morningweave --help`
+- Init config and USER_TODO: `morningweave init`
 
 ## Requirements
 - Go 1.24+ (module-managed; toolchain auto-download is enabled)
@@ -89,10 +89,10 @@ The following commands are implemented today:
 Examples:
 
 ```sh
-./morningweave init --email-provider resend
-./morningweave add-platform reddit
-./morningweave set-tags --name "ai" --keyword "llm" --keyword "machine learning" --language en
-./morningweave set-category --name "work" --keyword "golang" --recipient "you@example.com"
+morningweave init --email-provider resend
+morningweave add-platform reddit
+morningweave set-tags --name "ai" --keyword "llm" --keyword "machine learning" --language en
+morningweave set-category --name "work" --keyword "golang" --recipient "you@example.com"
 ```
 
 ## Project docs

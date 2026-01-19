@@ -9,8 +9,7 @@ If you need something done by the user, add it to USER_TODO.md. This especially 
 
 Feedback from TODOs and other improvements will be in USER_FEEDBACK.md. Read that and update or create any related tasks based on the feedback. The user has final say.
 
-Start implementing tasks.
-
 Make sure you close tasks after completion. When all tasks in an EPIC is done, consider if any new taks is needed or close the EPIC task as well.
 
-Wehn closing a task remember to commit it to git.
+Go through the code changes and make new git commmits with the changes. Make the commits atomic, and related to the now closed tasks in `./.tickets`. 
+The commit messages should be descriptive and follow https://www.freecodecamp.org/news/writing-good-commit-messages-a-practical-guide/ with the addition of referencing the ticket ID in the commit message first line.

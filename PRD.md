@@ -41,10 +41,9 @@ The tool should be written in golang
 ## 7) Credentials & Secrets
 - Preferred storage: OS keychain or 1Password; fallback to local YAML secrets section.
 - CLI offers `auth set <platform>` to store/retrieve; never prints secrets back.
-- `USER_TODO.md` is auto-maintained with step-by-step key acquisition guides per platform/provider.
 
 ## 8) CLI Surface (proposed)
-- `init` — generate `config.yaml` + empty `USER_TODO.md`, initialize the SQLite data store under `data/`, and prompt for email provider.
+- `init` — generate `config.yaml` initialize the SQLite data store under `data/`, and prompt for email provider.
 - `add-platform <name>` — enable platform and prompt for sources/creds.
 - `set-tags` / `set-category` — add/update tag/category definitions (keywords, schedule, weights).
 - `run [--tag <tag>|--category <cat>]` — one-shot worker.
@@ -88,7 +87,7 @@ The tool should be written in golang
 
 ## 14) Storage & State
 - SQLite for runs, seen items, dedupe cache, adaptive weights.
-- Files: `config.yaml`, `USER_TODO.md`, `data/` (SQLite, logs).
+- Files: `config.yaml`, `data/` (SQLite, logs).
 - Retention: logs 30 days (configurable); seen items 45 days.
 
 ## 15) Logging & Observability
