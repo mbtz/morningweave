@@ -1,2 +1,4 @@
 .fmail/
-.cache/config.yaml
+.cache/**/*
+config.yaml
+data/**/*
