@@ -33,7 +33,7 @@ import (
 
 type handler func(args []string) int
 
-var Version = "dev"
+var Version = "1.0.1"
 
 var commands = []string{
 	"init",
