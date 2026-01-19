@@ -23,14 +23,20 @@ Secrets can be stored in the OS keychain or 1Password (preferred) or in
 4. Send a test: `morningweave test-email`
 
 ## Reddit
-1. Create a Reddit app (type: script) at https://www.reddit.com/prefs/apps.
-2. Note the client id, client secret, and a user agent string.
-3. Required scope: `read`.
+1. Create a Reddit app at https://www.reddit.com/prefs/apps.
+   - Use a confidential app type: `script` (recommended) or `web app`.
+   - Copy the client id, client secret, and set a unique user agent string.
+2. Required scope: `read`.
+3. Decide auth mode:
+   - App-only (default): uses `client_credentials` and does not require a username/password.
+   - User-password (optional): uses the OAuth2 password grant when `username` and `password` are provided.
 4. Store credentials:
-   - Example payload:
+   - App-only payload:
+     `{"client_id":"...","client_secret":"...","user_agent":"..."}`
+   - User-password payload:
      `{"client_id":"...","client_secret":"...","user_agent":"...","username":"...","password":"..."}`
    - Command:
-     `morningweave auth set reddit --value '{"client_id":"...","client_secret":"...","user_agent":"...","username":"...","password":"..."}'`
+     `morningweave auth set reddit --value '{"client_id":"...","client_secret":"...","user_agent":"..."}'`
 5. Add sources with `morningweave add-platform reddit` or edit
    `platforms.reddit.sources` in `config.yaml`.
 
