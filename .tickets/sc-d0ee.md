@@ -1,6 +1,6 @@
 ---
 id: sc-d0ee
-status: in_progress
+status: closed
 deps: []
 links: []
 created: 2026-01-19T13:05:18Z

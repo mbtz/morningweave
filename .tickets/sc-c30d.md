@@ -1,6 +1,6 @@
 ---
 id: sc-c30d
-status: in_progress
+status: closed
 deps: []
 links: []
 created: 2026-01-19T13:05:08Z

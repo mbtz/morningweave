@@ -1,6 +1,6 @@
 ---
 id: a-cb22
-status: in_progress
+status: closed
 deps: []
 links: []
 created: 2026-01-19T17:52:38Z

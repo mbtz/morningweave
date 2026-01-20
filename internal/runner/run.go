@@ -372,14 +372,17 @@ func fetchItems(ctx context.Context, cfg config.Config, scope RunScope, since ti
 			warnings = append(warnings, "reddit: no sources configured")
 		} else if strings.TrimSpace(cfg.Platforms.Reddit.CredentialsRef) == "" {
 			warnings = append(warnings, "reddit: credentials_ref is required")
+			warnings = AppendAuthRequirementHint(warnings, "reddit")
 		} else {
 			credsRaw, err := resolver.Resolve(cfg.Platforms.Reddit.CredentialsRef)
 			if err != nil {
 				warnings = append(warnings, fmt.Sprintf("reddit: resolve credentials: %v", err))
+				warnings = AppendAuthRequirementHint(warnings, "reddit")
 			} else {
 				creds, err := reddit.ParseCredentials(credsRaw)
 				if err != nil {
 					warnings = append(warnings, fmt.Sprintf("reddit: parse credentials: %v", err))
+					warnings = AppendAuthRequirementHint(warnings, "reddit")
 				} else {
 					conn := reddit.New(reddit.WithCredentials(creds))
 					result, err := conn.Fetch(ctx, connectors.FetchRequest{
@@ -405,14 +408,17 @@ func fetchItems(ctx context.Context, cfg config.Config, scope RunScope, since ti
 			warnings = append(warnings, "x: no sources configured")
 		} else if strings.TrimSpace(cfg.Platforms.X.CredentialsRef) == "" {
 			warnings = append(warnings, "x: credentials_ref is required")
+			warnings = AppendAuthRequirementHint(warnings, "x")
 		} else {
 			credsRaw, err := resolver.Resolve(cfg.Platforms.X.CredentialsRef)
 			if err != nil {
 				warnings = append(warnings, fmt.Sprintf("x: resolve credentials: %v", err))
+				warnings = AppendAuthRequirementHint(warnings, "x")
 			} else {
 				creds, err := xconn.ParseCredentials(credsRaw)
 				if err != nil {
 					warnings = append(warnings, fmt.Sprintf("x: parse credentials: %v", err))
+					warnings = AppendAuthRequirementHint(warnings, "x")
 				} else {
 					conn := xconn.New(xconn.WithCredentials(creds))
 					result, err := conn.Fetch(ctx, connectors.FetchRequest{
@@ -438,14 +444,17 @@ func fetchItems(ctx context.Context, cfg config.Config, scope RunScope, since ti
 			warnings = append(warnings, "instagram: no sources configured")
 		} else if strings.TrimSpace(cfg.Platforms.Instagram.CredentialsRef) == "" {
 			warnings = append(warnings, "instagram: credentials_ref is required")
+			warnings = AppendAuthRequirementHint(warnings, "instagram")
 		} else {
 			credsRaw, err := resolver.Resolve(cfg.Platforms.Instagram.CredentialsRef)
 			if err != nil {
 				warnings = append(warnings, fmt.Sprintf("instagram: resolve credentials: %v", err))
+				warnings = AppendAuthRequirementHint(warnings, "instagram")
 			} else {
 				creds, err := instaconn.ParseCredentials(credsRaw)
 				if err != nil {
 					warnings = append(warnings, fmt.Sprintf("instagram: parse credentials: %v", err))
+					warnings = AppendAuthRequirementHint(warnings, "instagram")
 				} else {
 					conn := instaconn.New(instaconn.WithCredentials(creds))
 					result, err := conn.Fetch(ctx, connectors.FetchRequest{

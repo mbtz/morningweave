@@ -1,6 +1,6 @@
 ---
 id: sc-a58b
-status: in_progress
+status: closed
 deps: []
 links: []
 created: 2026-01-19T13:05:15Z

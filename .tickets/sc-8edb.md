@@ -1,6 +1,6 @@
 ---
 id: sc-8edb
-status: in_progress
+status: closed
 deps: []
 links: []
 created: 2026-01-19T13:05:23Z

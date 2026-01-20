@@ -1268,12 +1268,12 @@ func collectStatusWarnings(cfg config.Config) []string {
 
 	switch provider {
 	case "resend":
-		warnings = appendSecretWarning(warnings, "email.resend.api_key_ref", cfg.Email.Resend.APIKeyRef, store)
+		warnings, _ = appendSecretWarning(warnings, "email.resend.api_key_ref", cfg.Email.Resend.APIKeyRef, store)
 	case "smtp":
 		if strings.TrimSpace(cfg.Email.SMTP.Host) == "" {
 			warnings = append(warnings, "email.smtp.host is required")
 		}
-		warnings = appendSecretWarning(warnings, "email.smtp.password_ref", cfg.Email.SMTP.PasswordRef, store)
+		warnings, _ = appendSecretWarning(warnings, "email.smtp.password_ref", cfg.Email.SMTP.PasswordRef, store)
 	case "":
 		// no-op; already warned above.
 	default:
@@ -1306,35 +1306,39 @@ func collectStatusWarnings(cfg config.Config) []string {
 		}
 		if platform.needsCreds {
 			label := fmt.Sprintf("platforms.%s.credentials_ref", platform.name)
-			warnings = appendSecretWarning(warnings, label, platform.cfg.CredentialsRef, store)
+			var missing bool
+			warnings, missing = appendSecretWarning(warnings, label, platform.cfg.CredentialsRef, store)
+			if missing {
+				warnings = runner.AppendAuthRequirementHint(warnings, platform.name)
+			}
 		}
 	}
 
 	return warnings
 }
 
-func appendSecretWarning(warnings []string, label string, ref string, store secrets.Store) []string {
+func appendSecretWarning(warnings []string, label string, ref string, store secrets.Store) ([]string, bool) {
 	trimmed := strings.TrimSpace(ref)
 	if trimmed == "" {
-		return append(warnings, fmt.Sprintf("%s is required", label))
+		return append(warnings, fmt.Sprintf("%s is required", label)), true
 	}
 	status, err := store.Inspect(trimmed)
 	if err == nil {
 		if status.Found {
-			return warnings
+			return warnings, false
 		}
-		return append(warnings, fmt.Sprintf("%s missing (ref %s)", label, trimmed))
+		return append(warnings, fmt.Sprintf("%s missing (ref %s)", label, trimmed)), true
 	}
 
 	switch {
 	case errors.Is(err, secrets.ErrNotFound):
-		return append(warnings, fmt.Sprintf("%s missing (ref %s)", label, trimmed))
+		return append(warnings, fmt.Sprintf("%s missing (ref %s)", label, trimmed)), true
 	case errors.Is(err, secrets.ErrProviderUnavailable):
-		return append(warnings, fmt.Sprintf("%s provider unavailable (ref %s)", label, trimmed))
+		return append(warnings, fmt.Sprintf("%s provider unavailable (ref %s)", label, trimmed)), true
 	case errors.Is(err, secrets.ErrUnsupportedProvider):
-		return append(warnings, fmt.Sprintf("%s unsupported provider (ref %s)", label, trimmed))
+		return append(warnings, fmt.Sprintf("%s unsupported provider (ref %s)", label, trimmed)), true
 	default:
-		return append(warnings, fmt.Sprintf("%s check failed (ref %s): %v", label, trimmed, err))
+		return append(warnings, fmt.Sprintf("%s check failed (ref %s): %v", label, trimmed, err)), true
 	}
 }
 
