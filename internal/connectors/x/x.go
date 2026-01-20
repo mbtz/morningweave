@@ -44,14 +44,41 @@ func ParseCredentials(raw string) (Credentials, error) {
 		}
 	}
 
-	for _, part := range splitPairs(trimmed) {
-		key, value, ok := splitPair(part)
-		if !ok {
-			continue
+	var rawMap map[string]any
+	if json.Unmarshal([]byte(trimmed), &rawMap) == nil {
+		applyCredentialMap(&creds, rawMap)
+		if !creds.isEmpty() {
+			return creds, nil
 		}
-		switch key {
-		case "bearer_token", "bearer", "token", "access_token":
-			creds.BearerToken = value
+		if notes, ok := rawMap["notesPlain"].(string); ok {
+			applyCredentialPairs(&creds, notes)
+			if !creds.isEmpty() {
+				return creds, nil
+			}
+		}
+		if fields, ok := rawMap["fields"]; ok {
+			applyCredentialFields(&creds, fields)
+			if !creds.isEmpty() {
+				return creds, nil
+			}
+		}
+	}
+
+	applyCredentialPairs(&creds, trimmed)
+
+	if creds.isEmpty() {
+		if strings.HasPrefix(strings.ToLower(trimmed), "bearer ") {
+			creds.BearerToken = strings.TrimSpace(trimmed[len("bearer "):])
+		}
+	}
+
+	if creds.isEmpty() {
+		if trimmed != "" &&
+			!strings.ContainsAny(trimmed, " \t\n\r") &&
+			!strings.ContainsAny(trimmed, ":=") &&
+			!strings.HasPrefix(trimmed, "{") &&
+			!strings.HasPrefix(trimmed, "[") {
+			creds.BearerToken = trimmed
 		}
 	}
 
@@ -760,6 +787,110 @@ func splitPairs(value string) []string {
 		}
 	}
 	return out
+}
+
+func applyCredentialMap(creds *Credentials, raw map[string]any) {
+	if creds == nil || len(raw) == 0 {
+		return
+	}
+	for key, value := range raw {
+		applyCredentialValue(creds, key, value)
+		if !creds.isEmpty() {
+			return
+		}
+	}
+}
+
+func applyCredentialFields(creds *Credentials, fields any) {
+	if creds == nil {
+		return
+	}
+	items, ok := fields.([]any)
+	if !ok {
+		return
+	}
+	for _, item := range items {
+		field, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		key := ""
+		if label, ok := field["label"].(string); ok {
+			key = label
+		} else if name, ok := field["name"].(string); ok {
+			key = name
+		} else if id, ok := field["id"].(string); ok {
+			key = id
+		}
+		if key == "" {
+			continue
+		}
+		applyCredentialValue(creds, key, field["value"])
+		if !creds.isEmpty() {
+			return
+		}
+	}
+}
+
+func applyCredentialPairs(creds *Credentials, value string) {
+	if creds == nil {
+		return
+	}
+	for _, part := range splitPairs(value) {
+		key, val, ok := splitPair(part)
+		if !ok {
+			continue
+		}
+		applyCredentialValue(creds, key, val)
+		if !creds.isEmpty() {
+			return
+		}
+	}
+}
+
+func applyCredentialValue(creds *Credentials, key string, value any) {
+	if creds == nil {
+		return
+	}
+	normalized := normalizeCredentialKey(key)
+	token := normalizeCredentialToken(value)
+	if strings.HasPrefix(strings.ToLower(token), "bearer ") {
+		token = strings.TrimSpace(token[len("bearer "):])
+	}
+	if token == "" {
+		return
+	}
+	switch normalized {
+	case "bearer_token", "bearer", "token", "access_token", "x_api_key", "x_ap_key", "xapikey", "api_key", "apikey":
+		creds.BearerToken = token
+	}
+}
+
+func normalizeCredentialKey(key string) string {
+	normalized := strings.ToLower(strings.TrimSpace(key))
+	normalized = strings.ReplaceAll(normalized, " ", "_")
+	normalized = strings.ReplaceAll(normalized, "-", "_")
+	return normalized
+}
+
+func normalizeCredentialToken(value any) string {
+	switch v := value.(type) {
+	case string:
+		return strings.TrimSpace(v)
+	case []byte:
+		return strings.TrimSpace(string(v))
+	case map[string]any:
+		if inner, ok := v["value"]; ok {
+			return normalizeCredentialToken(inner)
+		}
+		if inner, ok := v["text"]; ok {
+			return normalizeCredentialToken(inner)
+		}
+		if inner, ok := v["token"]; ok {
+			return normalizeCredentialToken(inner)
+		}
+	}
+	return ""
 }
 
 func splitPair(value string) (string, string, bool) {

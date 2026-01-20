@@ -10,5 +10,4 @@ assignee: Marius Holter Berntzen
 ---
 # Add shell completion support
 
-Provide  output for bash/zsh/fish so shell auto-completion works for all commands/options. Document installation steps.
-
+Provide `completion <shell>` output for bash/zsh/fish so shell auto-completion works for all commands/options. Document installation steps.

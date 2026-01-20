@@ -112,6 +112,89 @@ func TestFetchMissingCredentials(t *testing.T) {
 	}
 }
 
+func TestParseCredentialsRawToken(t *testing.T) {
+	creds, err := ParseCredentials("raw-token-123")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if creds.BearerToken != "raw-token-123" {
+		t.Fatalf("unexpected token: %q", creds.BearerToken)
+	}
+}
+
+func TestParseCredentialsBearerPrefix(t *testing.T) {
+	creds, err := ParseCredentials("Bearer token-321")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if creds.BearerToken != "token-321" {
+		t.Fatalf("unexpected token: %q", creds.BearerToken)
+	}
+}
+
+func TestParseCredentialsAliasKey(t *testing.T) {
+	creds, err := ParseCredentials("x-api-key: token-456")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if creds.BearerToken != "token-456" {
+		t.Fatalf("unexpected token: %q", creds.BearerToken)
+	}
+}
+
+func TestParseCredentialsAliasKeyTypo(t *testing.T) {
+	creds, err := ParseCredentials("x-ap-key: token-457")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if creds.BearerToken != "token-457" {
+		t.Fatalf("unexpected token: %q", creds.BearerToken)
+	}
+}
+
+func TestParseCredentialsJSONAlias(t *testing.T) {
+	creds, err := ParseCredentials(`{"x-api-key":"token-789"}`)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if creds.BearerToken != "token-789" {
+		t.Fatalf("unexpected token: %q", creds.BearerToken)
+	}
+}
+
+func TestParseCredentialsOPItemFields(t *testing.T) {
+	payload := `{"id":"item-123","fields":[{"label":"x-api-key","value":"token-op-1"}]}`
+	creds, err := ParseCredentials(payload)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if creds.BearerToken != "token-op-1" {
+		t.Fatalf("unexpected token: %q", creds.BearerToken)
+	}
+}
+
+func TestParseCredentialsOPNotesPlain(t *testing.T) {
+	payload := `{"id":"item-456","notesPlain":"x-api-key: token-op-2"}`
+	creds, err := ParseCredentials(payload)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if creds.BearerToken != "token-op-2" {
+		t.Fatalf("unexpected token: %q", creds.BearerToken)
+	}
+}
+
+func TestParseCredentialsOPNestedFieldValue(t *testing.T) {
+	payload := `{"id":"item-789","fields":[{"label":"x-api-key","value":{"value":"token-op-3"}}]}`
+	creds, err := ParseCredentials(payload)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if creds.BearerToken != "token-op-3" {
+		t.Fatalf("unexpected token: %q", creds.BearerToken)
+	}
+}
+
 func newXTestServer(t *testing.T, now time.Time) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()

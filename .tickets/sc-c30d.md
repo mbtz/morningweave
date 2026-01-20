@@ -10,5 +10,4 @@ assignee: Marius Holter Berntzen
 ---
 # Add config edit command
 
-Add  to open the current config file in the user's default terminal editor (EDITOR fallback). Update usage/help and docs.
-
+Add `config edit` to open the current config file in the user's default terminal editor (EDITOR fallback). Update usage/help and docs.

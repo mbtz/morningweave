@@ -12,6 +12,19 @@ and storing secrets safely.
 Secrets can be stored in the OS keychain or 1Password (preferred) or in
 `secrets.values` in `config.yaml` as a fallback.
 
+When running interactively, `add-platform` will offer to capture credentials
+and store them in your chosen provider (keychain, 1Password ref, or secrets).
+Use `auth set` to update references later without editing config by hand.
+
+### 1Password references
+Use `op://<vault>/<item>/<field>` references to point at a 1Password field.
+For X, the field key should be `x-api-key` (or `x-ap-key` if that's what your
+item uses). Example:
+
+```
+morningweave auth set x --ref "op://Morningweave/Platform API/x-api-key"
+```
+
 ## Email provider (Resend or SMTP)
 1. Pick a provider and update `email.provider` in `config.yaml` if needed.
 2. Store credentials:
@@ -45,8 +58,8 @@ Secrets can be stored in the OS keychain or 1Password (preferred) or in
 2. Generate a bearer token.
 3. Required scopes: `tweet.read`, `users.read`.
 4. Store credentials:
-   - Example payload: `{"bearer_token":"..."}`
-   - Command: `morningweave auth set x --value '{"bearer_token":"..."}'`
+   - Simplest: `morningweave auth set x --value "<bearer-token>"`
+   - JSON payloads are also accepted (ex: `{"bearer_token":"..."}`).
 5. Add sources with `morningweave add-platform x` or edit
    `platforms.x.sources` in `config.yaml`.
 

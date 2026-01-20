@@ -245,16 +245,29 @@ func cmdAddPlatform(args []string) int {
 	platform["enabled"] = true
 
 	if spec.needsCreds {
-		defaultRef := normalizeString(platform["credentials_ref"])
-		if defaultRef == "" {
-			defaultRef = fmt.Sprintf("keychain:%s", name)
+		credentialsRef := normalizeString(platform["credentials_ref"])
+		if credentialsRef == "" {
+			credentialsRef = fmt.Sprintf("keychain:%s", name)
 		}
-		selection, ok := promptText(os.Stdin, os.Stdout, "Credentials reference", defaultRef)
-		if ok {
-			platform["credentials_ref"] = selection
-		} else {
-			platform["credentials_ref"] = defaultRef
+		if isInteractive() {
+			setupNow, ok := promptConfirm(os.Stdin, os.Stdout, "Configure credentials now", true)
+			if ok && setupNow {
+				ref, err := setupPlatformCredentials(os.Stdin, os.Stdout, name, config, credentialsRef)
+				if err != nil {
+					fmt.Fprintln(os.Stderr, err)
+					return 1
+				}
+				if strings.TrimSpace(ref) != "" {
+					credentialsRef = ref
+				}
+			} else {
+				selection, ok := promptText(os.Stdin, os.Stdout, "Credentials reference", credentialsRef)
+				if ok && strings.TrimSpace(selection) != "" {
+					credentialsRef = selection
+				}
+			}
 		}
+		platform["credentials_ref"] = credentialsRef
 	}
 
 	sourcesValue := platform["sources"]
@@ -345,6 +358,43 @@ func cmdConfigEdit(args []string) int {
 	if err := cmd.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to launch editor: %v\n", err)
 		return 1
+	}
+	return 0
+}
+
+func cmdCompletion(args []string) int {
+	fs := flag.NewFlagSet("completion", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			printCompletionUsage(os.Stdout, fs)
+			return 0
+		}
+		fmt.Fprintf(os.Stderr, "failed to parse flags: %v\n", err)
+		printCompletionUsage(os.Stderr, fs)
+		return 2
+	}
+
+	if fs.NArg() < 1 || strings.TrimSpace(fs.Arg(0)) == "" {
+		fmt.Fprintln(os.Stderr, "shell name is required.")
+		printCompletionUsage(os.Stderr, fs)
+		return 2
+	}
+
+	shell := strings.ToLower(strings.TrimSpace(fs.Arg(0)))
+	switch shell {
+	case "bash":
+		fmt.Fprint(os.Stdout, completionScriptBash())
+	case "zsh":
+		fmt.Fprint(os.Stdout, completionScriptZsh())
+	case "fish":
+		fmt.Fprint(os.Stdout, completionScriptFish())
+	case "-h", "--help", "help":
+		printCompletionUsage(os.Stdout, fs)
+	default:
+		fmt.Fprintf(os.Stderr, "unsupported shell %q. Use bash, zsh, or fish.\n", shell)
+		return 2
 	}
 	return 0
 }
@@ -702,8 +752,18 @@ func cmdAuthSet(args []string) int {
 
 	provider, key, ok := secrets.ParseRef(ref)
 	if !ok || strings.TrimSpace(key) == "" {
-		fmt.Fprintln(os.Stderr, "invalid reference; use secrets:<key>, keychain:<key>, or env:VAR.")
+		fmt.Fprintln(os.Stderr, "invalid reference; use secrets:<key>, keychain:<key>, env:VAR, or op://vault/item/field.")
 		return 2
+	}
+
+	if provider == "op" || provider == "1password" {
+		refInfo.SetRef(ref)
+		if err := writeYAMLConfig(*configPath, config); err != nil {
+			return 1
+		}
+		fmt.Fprintf(os.Stdout, "Stored 1Password reference for %s: %s\n", refInfo.Label(), ref)
+		fmt.Fprintln(os.Stdout, "1Password is read-only; ensure the item and field key exist.")
+		return 0
 	}
 
 	secretValue := strings.TrimSpace(*value)
@@ -1774,6 +1834,8 @@ func cmdSetLabel(args []string, labelKey string) int {
 func printAddPlatformUsage(w io.Writer, fs *flag.FlagSet) {
 	fmt.Fprintln(w, "Usage: morningweave add-platform [options] <name>")
 	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Interactive runs prompt for sources and credential setup.")
+	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "See docs/platform-setup.md for step-by-step key setup.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Options:")
@@ -1792,6 +1854,17 @@ func printConfigUsage(w io.Writer) {
 
 func printConfigEditUsage(w io.Writer, fs *flag.FlagSet) {
 	fmt.Fprintln(w, "Usage: morningweave config edit [options]")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Options:")
+	fs.SetOutput(w)
+	fs.PrintDefaults()
+}
+
+func printCompletionUsage(w io.Writer, fs *flag.FlagSet) {
+	fmt.Fprintln(w, "Usage: morningweave completion <shell>")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Shells:")
+	fmt.Fprintln(w, "  bash, zsh, fish")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Options:")
 	fs.SetOutput(w)
@@ -1858,6 +1931,223 @@ func printCronUsage(w io.Writer, fs *flag.FlagSet) {
 	fs.PrintDefaults()
 }
 
+func completionScriptBash() string {
+	return `# bash completion for morningweave
+_morningweave() {
+  local cur prev
+  COMPREPLY=()
+  cur="${COMP_WORDS[COMP_CWORD]}"
+  prev="${COMP_WORDS[COMP_CWORD-1]}"
+
+  local commands="init add-platform config completion set-tags set-category run start stop status logs test-email auth cron version"
+
+  if [[ $COMP_CWORD -eq 1 ]]; then
+    COMPREPLY=( $(compgen -W "$commands" -- "$cur") )
+    return 0
+  fi
+
+  case "${COMP_WORDS[1]}" in
+    init)
+      COMPREPLY=( $(compgen -W "--config --email-provider --help -h" -- "$cur") )
+      ;;
+    add-platform)
+      COMPREPLY=( $(compgen -W "--config --help -h reddit x instagram hn" -- "$cur") )
+      ;;
+    config)
+      if [[ $COMP_CWORD -eq 2 ]]; then
+        COMPREPLY=( $(compgen -W "edit --help -h" -- "$cur") )
+      else
+        case "${COMP_WORDS[2]}" in
+          edit)
+            COMPREPLY=( $(compgen -W "--config --help -h" -- "$cur") )
+            ;;
+        esac
+      fi
+      ;;
+    completion)
+      COMPREPLY=( $(compgen -W "bash zsh fish --help -h" -- "$cur") )
+      ;;
+    set-tags|set-category)
+      COMPREPLY=( $(compgen -W "--config --name --keyword --language --recipient --schedule --weight --help -h" -- "$cur") )
+      ;;
+    run)
+      COMPREPLY=( $(compgen -W "--config --tag --category --help -h" -- "$cur") )
+      ;;
+    start)
+      COMPREPLY=( $(compgen -W "--config --headless --help -h" -- "$cur") )
+      ;;
+    stop)
+      COMPREPLY=( $(compgen -W "--config --help -h" -- "$cur") )
+      ;;
+    status)
+      COMPREPLY=( $(compgen -W "--config --help -h" -- "$cur") )
+      ;;
+    logs)
+      COMPREPLY=( $(compgen -W "--config --since --json --limit --help -h" -- "$cur") )
+      ;;
+    test-email)
+      COMPREPLY=( $(compgen -W "--config --subject --help -h" -- "$cur") )
+      ;;
+    auth)
+      if [[ $COMP_CWORD -eq 2 ]]; then
+        COMPREPLY=( $(compgen -W "set get clear --help -h" -- "$cur") )
+      else
+        case "${COMP_WORDS[2]}" in
+          set)
+            COMPREPLY=( $(compgen -W "--config --ref --value --stdin --help -h x reddit instagram hn email" -- "$cur") )
+            ;;
+          get|clear)
+            COMPREPLY=( $(compgen -W "--config --help -h x reddit instagram hn email" -- "$cur") )
+            ;;
+        esac
+      fi
+      ;;
+    cron)
+      COMPREPLY=( $(compgen -W "--config --command --help -h" -- "$cur") )
+      ;;
+  esac
+}
+complete -F _morningweave morningweave
+`
+}
+
+func completionScriptZsh() string {
+	return `#compdef morningweave
+
+local -a commands
+commands=(init add-platform config completion set-tags set-category run start stop status logs test-email auth cron version)
+
+if (( CURRENT == 2 )); then
+  compadd -- $commands
+  return
+fi
+
+case $words[2] in
+  init)
+    compadd -- --config --email-provider --help -h
+    ;;
+  add-platform)
+    compadd -- --config --help -h reddit x instagram hn
+    ;;
+  config)
+    if (( CURRENT == 3 )); then
+      compadd -- edit --help -h
+    else
+      case $words[3] in
+        edit)
+          compadd -- --config --help -h
+          ;;
+      esac
+    fi
+    ;;
+  completion)
+    compadd -- bash zsh fish --help -h
+    ;;
+  set-tags|set-category)
+    compadd -- --config --name --keyword --language --recipient --schedule --weight --help -h
+    ;;
+  run)
+    compadd -- --config --tag --category --help -h
+    ;;
+  start)
+    compadd -- --config --headless --help -h
+    ;;
+  stop)
+    compadd -- --config --help -h
+    ;;
+  status)
+    compadd -- --config --help -h
+    ;;
+  logs)
+    compadd -- --config --since --json --limit --help -h
+    ;;
+  test-email)
+    compadd -- --config --subject --help -h
+    ;;
+  auth)
+    if (( CURRENT == 3 )); then
+      compadd -- set get clear --help -h
+    else
+      case $words[3] in
+        set)
+          compadd -- --config --ref --value --stdin --help -h x reddit instagram hn email
+          ;;
+        get|clear)
+          compadd -- --config --help -h x reddit instagram hn email
+          ;;
+      esac
+    fi
+    ;;
+  cron)
+    compadd -- --config --command --help -h
+    ;;
+esac
+`
+}
+
+func completionScriptFish() string {
+	return `complete -c morningweave -f -n "__fish_use_subcommand" -a "init add-platform config completion set-tags set-category run start stop status logs test-email auth cron version"
+
+complete -c morningweave -f -n "__fish_seen_subcommand_from init" -l config -d "Path to config file"
+complete -c morningweave -f -n "__fish_seen_subcommand_from init" -l email-provider -d "Email provider"
+
+complete -c morningweave -f -n "__fish_seen_subcommand_from add-platform" -l config -d "Path to config file"
+complete -c morningweave -f -n "__fish_seen_subcommand_from add-platform" -a "reddit x instagram hn"
+
+complete -c morningweave -f -n "__fish_seen_subcommand_from config" -a "edit"
+complete -c morningweave -f -n "__fish_seen_subcommand_from config; and __fish_seen_subcommand_from edit" -l config -d "Path to config file"
+
+complete -c morningweave -f -n "__fish_seen_subcommand_from completion" -a "bash zsh fish"
+
+complete -c morningweave -f -n "__fish_seen_subcommand_from set-tags" -l config -d "Path to config file"
+complete -c morningweave -f -n "__fish_seen_subcommand_from set-tags" -l name -d "Name"
+complete -c morningweave -f -n "__fish_seen_subcommand_from set-tags" -l keyword -d "Keyword"
+complete -c morningweave -f -n "__fish_seen_subcommand_from set-tags" -l language -d "Language"
+complete -c morningweave -f -n "__fish_seen_subcommand_from set-tags" -l recipient -d "Recipient"
+complete -c morningweave -f -n "__fish_seen_subcommand_from set-tags" -l schedule -d "Schedule"
+complete -c morningweave -f -n "__fish_seen_subcommand_from set-tags" -l weight -d "Weight"
+
+complete -c morningweave -f -n "__fish_seen_subcommand_from set-category" -l config -d "Path to config file"
+complete -c morningweave -f -n "__fish_seen_subcommand_from set-category" -l name -d "Name"
+complete -c morningweave -f -n "__fish_seen_subcommand_from set-category" -l keyword -d "Keyword"
+complete -c morningweave -f -n "__fish_seen_subcommand_from set-category" -l language -d "Language"
+complete -c morningweave -f -n "__fish_seen_subcommand_from set-category" -l recipient -d "Recipient"
+complete -c morningweave -f -n "__fish_seen_subcommand_from set-category" -l schedule -d "Schedule"
+complete -c morningweave -f -n "__fish_seen_subcommand_from set-category" -l weight -d "Weight"
+
+complete -c morningweave -f -n "__fish_seen_subcommand_from run" -l config -d "Path to config file"
+complete -c morningweave -f -n "__fish_seen_subcommand_from run" -l tag -d "Tag"
+complete -c morningweave -f -n "__fish_seen_subcommand_from run" -l category -d "Category"
+
+complete -c morningweave -f -n "__fish_seen_subcommand_from start" -l config -d "Path to config file"
+complete -c morningweave -f -n "__fish_seen_subcommand_from start" -l headless -d "Headless mode"
+
+complete -c morningweave -f -n "__fish_seen_subcommand_from stop" -l config -d "Path to config file"
+complete -c morningweave -f -n "__fish_seen_subcommand_from status" -l config -d "Path to config file"
+complete -c morningweave -f -n "__fish_seen_subcommand_from logs" -l config -d "Path to config file"
+complete -c morningweave -f -n "__fish_seen_subcommand_from logs" -l since -d "Since time"
+complete -c morningweave -f -n "__fish_seen_subcommand_from logs" -l json -d "JSON output"
+complete -c morningweave -f -n "__fish_seen_subcommand_from logs" -l limit -d "Limit"
+
+complete -c morningweave -f -n "__fish_seen_subcommand_from test-email" -l config -d "Path to config file"
+complete -c morningweave -f -n "__fish_seen_subcommand_from test-email" -l subject -d "Subject"
+
+complete -c morningweave -f -n "__fish_seen_subcommand_from auth" -a "set get clear"
+complete -c morningweave -f -n "__fish_seen_subcommand_from auth; and __fish_seen_subcommand_from set" -l config -d "Path to config file"
+complete -c morningweave -f -n "__fish_seen_subcommand_from auth; and __fish_seen_subcommand_from set" -l ref -d "Secret reference"
+complete -c morningweave -f -n "__fish_seen_subcommand_from auth; and __fish_seen_subcommand_from set" -l value -d "Secret value"
+complete -c morningweave -f -n "__fish_seen_subcommand_from auth; and __fish_seen_subcommand_from set" -l stdin -d "Read from stdin"
+complete -c morningweave -f -n "__fish_seen_subcommand_from auth; and __fish_seen_subcommand_from set" -a "x reddit instagram hn email"
+complete -c morningweave -f -n "__fish_seen_subcommand_from auth; and __fish_seen_subcommand_from get" -l config -d "Path to config file"
+complete -c morningweave -f -n "__fish_seen_subcommand_from auth; and __fish_seen_subcommand_from get" -a "x reddit instagram hn email"
+complete -c morningweave -f -n "__fish_seen_subcommand_from auth; and __fish_seen_subcommand_from clear" -l config -d "Path to config file"
+complete -c morningweave -f -n "__fish_seen_subcommand_from auth; and __fish_seen_subcommand_from clear" -a "x reddit instagram hn email"
+
+complete -c morningweave -f -n "__fish_seen_subcommand_from cron" -l config -d "Path to config file"
+complete -c morningweave -f -n "__fish_seen_subcommand_from cron" -l command -d "Command"
+`
+}
+
 func printAuthUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: morningweave auth <set|get|clear> [options] <platform|email>")
 	fmt.Fprintln(w, "")
@@ -1876,6 +2166,8 @@ func printAuthUsage(w io.Writer) {
 
 func printAuthSetUsage(w io.Writer, fs *flag.FlagSet) {
 	fmt.Fprintln(w, "Usage: morningweave auth set [options] <platform|email>")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Note: Use --ref op://<vault>/<item>/<field> for 1Password references.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Options:")
 	fs.SetOutput(w)
@@ -2040,6 +2332,261 @@ func promptList(input io.Reader, output io.Writer, prompt string, existing []str
 		return nil, false
 	}
 	return normalizeListArgs([]string{value}), true
+}
+
+func promptConfirm(input io.Reader, output io.Writer, prompt string, defaultYes bool) (bool, bool) {
+	if !isInteractive() {
+		return false, false
+	}
+	defaultValue := "y"
+	if !defaultYes {
+		defaultValue = "n"
+	}
+	answer, ok := promptText(input, output, fmt.Sprintf("%s (y/n)", prompt), defaultValue)
+	if !ok {
+		return false, false
+	}
+	switch strings.ToLower(strings.TrimSpace(answer)) {
+	case "y", "yes":
+		return true, true
+	case "n", "no":
+		return false, true
+	default:
+		return defaultYes, true
+	}
+}
+
+func setupPlatformCredentials(input io.Reader, output io.Writer, platform string, config map[string]any, existingRef string) (string, error) {
+	if !isInteractive() {
+		return existingRef, nil
+	}
+	defaultProvider := normalizeProvider(existingRef)
+	if defaultProvider == "" {
+		defaultProvider = "keychain"
+	}
+	provider, ok := promptCredentialProvider(input, output, defaultProvider)
+	if !ok {
+		return existingRef, nil
+	}
+	switch provider {
+	case "skip":
+		return existingRef, nil
+	case "op":
+		ref, ok := promptOpReference(input, output, platform, existingRef)
+		if !ok || strings.TrimSpace(ref) == "" {
+			return "", errors.New("1Password reference is required")
+		}
+		fmt.Fprintf(output, "Set 1Password reference: %s\n", ref)
+		return ref, nil
+	case "keychain":
+		key := defaultRefKey(existingRef, platform, "keychain")
+		selection, ok := promptText(input, output, "Keychain account (service/account)", key)
+		if !ok || strings.TrimSpace(selection) == "" {
+			return "", errors.New("keychain account is required")
+		}
+		ref := fmt.Sprintf("keychain:%s", selection)
+		payload, err := promptPlatformCredentialsPayload(input, output, platform)
+		if err != nil {
+			return "", err
+		}
+		store := secrets.NewStore(nil)
+		if _, err := store.Set(ref, payload); err != nil {
+			return "", mapStoreError(provider, err)
+		}
+		return ref, nil
+	case "secrets":
+		key := defaultRefKey(existingRef, platform, "secrets")
+		selection, ok := promptText(input, output, "Secrets key", key)
+		if !ok || strings.TrimSpace(selection) == "" {
+			return "", errors.New("secrets key is required")
+		}
+		ref := fmt.Sprintf("secrets:%s", selection)
+		payload, err := promptPlatformCredentialsPayload(input, output, platform)
+		if err != nil {
+			return "", err
+		}
+		values, ok := ensureSecretsValues(config)
+		if !ok {
+			return "", errors.New("secrets.values is unavailable in config.yaml")
+		}
+		store := secrets.NewStore(values)
+		if _, err := store.Set(ref, payload); err != nil {
+			return "", mapStoreError(provider, err)
+		}
+		return ref, nil
+	default:
+		return existingRef, nil
+	}
+}
+
+func promptCredentialProvider(input io.Reader, output io.Writer, defaultProvider string) (string, bool) {
+	normalizedDefault := normalizeCredentialProvider(defaultProvider)
+	if normalizedDefault == "" {
+		normalizedDefault = "keychain"
+	}
+	value, ok := promptText(input, output, "Credentials provider (keychain/1password/secrets/skip)", normalizedDefault)
+	if !ok {
+		return "", false
+	}
+	normalized := normalizeCredentialProvider(value)
+	if normalized == "" {
+		fmt.Fprintf(output, "Unknown provider %q. Choose keychain, 1password, secrets, or skip.\n", value)
+		return "", false
+	}
+	return normalized, true
+}
+
+func normalizeCredentialProvider(value string) string {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	switch normalized {
+	case "keychain", "kc":
+		return "keychain"
+	case "secrets", "secret":
+		return "secrets"
+	case "1password", "op", "onepassword", "1p":
+		return "op"
+	case "skip", "later", "none":
+		return "skip"
+	default:
+		return ""
+	}
+}
+
+func promptOpReference(input io.Reader, output io.Writer, platform string, existingRef string) (string, bool) {
+	vault, item, field := parseOpRef(existingRef)
+	if strings.TrimSpace(field) == "" && platform == "x" {
+		field = "x-api-key"
+	}
+
+	vault, ok := promptText(input, output, "1Password vault", vault)
+	if !ok {
+		return "", false
+	}
+	item, ok = promptText(input, output, "1Password item", item)
+	if !ok {
+		return "", false
+	}
+	fieldPrompt := "1Password field"
+	if platform == "x" {
+		fieldPrompt = "1Password field (x-api-key or x-ap-key)"
+	}
+	field, ok = promptText(input, output, fieldPrompt, field)
+	if !ok {
+		return "", false
+	}
+	if strings.TrimSpace(vault) == "" || strings.TrimSpace(item) == "" || strings.TrimSpace(field) == "" {
+		return "", false
+	}
+	return fmt.Sprintf("op://%s/%s/%s", strings.TrimSpace(vault), strings.TrimSpace(item), strings.TrimSpace(field)), true
+}
+
+func parseOpRef(ref string) (string, string, string) {
+	if strings.TrimSpace(ref) == "" {
+		return "", "", ""
+	}
+	provider, key, ok := secrets.ParseRef(ref)
+	if !ok || provider != "op" {
+		return "", "", ""
+	}
+	raw := strings.TrimPrefix(key, "op://")
+	parts := strings.Split(raw, "/")
+	if len(parts) < 3 {
+		return "", "", ""
+	}
+	vault := strings.TrimSpace(parts[0])
+	item := strings.TrimSpace(parts[1])
+	field := strings.TrimSpace(strings.Join(parts[2:], "/"))
+	return vault, item, field
+}
+
+func defaultRefKey(existingRef string, fallback string, provider string) string {
+	if strings.TrimSpace(existingRef) == "" {
+		return fallback
+	}
+	refProvider, key, ok := secrets.ParseRef(existingRef)
+	if !ok {
+		return fallback
+	}
+	if refProvider == provider && strings.TrimSpace(key) != "" {
+		return key
+	}
+	return fallback
+}
+
+func promptPlatformCredentialsPayload(input io.Reader, output io.Writer, platform string) (string, error) {
+	switch platform {
+	case "x":
+		token, ok := promptSecret(input, output, "X bearer token")
+		if !ok || strings.TrimSpace(token) == "" {
+			return "", errors.New("x bearer token is required")
+		}
+		return strings.TrimSpace(token), nil
+	case "reddit":
+		clientID, ok := promptText(input, output, "Reddit client id", "")
+		if !ok {
+			return "", errors.New("reddit client id is required")
+		}
+		clientSecret, _ := promptText(input, output, "Reddit client secret (optional)", "")
+		userAgent, ok := promptText(input, output, "Reddit user agent", "")
+		if !ok {
+			return "", errors.New("reddit user agent is required")
+		}
+		username, _ := promptText(input, output, "Reddit username (optional)", "")
+		password, _ := promptSecret(input, output, "Reddit password (optional)")
+		if strings.TrimSpace(clientID) == "" || strings.TrimSpace(userAgent) == "" {
+			return "", errors.New("client_id and user_agent are required")
+		}
+		payload := map[string]string{
+			"client_id":  strings.TrimSpace(clientID),
+			"user_agent": strings.TrimSpace(userAgent),
+		}
+		if strings.TrimSpace(clientSecret) != "" {
+			payload["client_secret"] = strings.TrimSpace(clientSecret)
+		}
+		if strings.TrimSpace(username) != "" {
+			payload["username"] = strings.TrimSpace(username)
+		}
+		if strings.TrimSpace(password) != "" {
+			payload["password"] = strings.TrimSpace(password)
+		}
+		data, err := json.Marshal(payload)
+		if err != nil {
+			return "", fmt.Errorf("failed to encode reddit credentials: %w", err)
+		}
+		return string(data), nil
+	case "instagram":
+		token, ok := promptSecret(input, output, "Instagram access token")
+		if !ok || strings.TrimSpace(token) == "" {
+			return "", errors.New("instagram access token is required")
+		}
+		userID, _ := promptText(input, output, "Instagram user id (optional)", "")
+		payload := map[string]string{
+			"access_token": strings.TrimSpace(token),
+		}
+		if strings.TrimSpace(userID) != "" {
+			payload["user_id"] = strings.TrimSpace(userID)
+		}
+		data, err := json.Marshal(payload)
+		if err != nil {
+			return "", fmt.Errorf("failed to encode instagram credentials: %w", err)
+		}
+		return string(data), nil
+	default:
+		return "", fmt.Errorf("unsupported platform: %s", platform)
+	}
+}
+
+func mapStoreError(provider string, err error) error {
+	switch {
+	case errors.Is(err, secrets.ErrReadOnlyProvider):
+		return fmt.Errorf("provider %q is read-only", provider)
+	case errors.Is(err, secrets.ErrProviderUnavailable):
+		return fmt.Errorf("provider %q is unavailable; install its CLI or use secrets:<key>", provider)
+	case errors.Is(err, secrets.ErrUnsupportedProvider):
+		return fmt.Errorf("provider %q is unsupported", provider)
+	default:
+		return fmt.Errorf("failed to store secret: %w", err)
+	}
 }
 
 func normalizeListArgs(values []string) []string {

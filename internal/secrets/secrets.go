@@ -104,6 +104,10 @@ func parseRef(ref string) (string, string, bool) {
 	if trimmed == "" {
 		return "", "", false
 	}
+	lower := strings.ToLower(trimmed)
+	if strings.HasPrefix(lower, "op://") {
+		return "op", "op://"+trimmed[len("op://"):], true
+	}
 	parts := strings.SplitN(trimmed, ":", 2)
 	if len(parts) == 1 {
 		return "plain", trimmed, true
@@ -113,5 +117,21 @@ func parseRef(ref string) (string, string, bool) {
 	if provider == "" {
 		provider = "plain"
 	}
+	if provider == "op" || provider == "1password" {
+		key = normalizeOpKey(key)
+	}
 	return provider, key, true
+}
+
+func normalizeOpKey(key string) string {
+	trimmed := strings.TrimSpace(key)
+	if trimmed == "" {
+		return ""
+	}
+	if strings.HasPrefix(strings.ToLower(trimmed), "op://") {
+		return "op://" + trimmed[len("op://"):]
+	}
+	trimmed = strings.TrimPrefix(trimmed, "//")
+	trimmed = strings.TrimPrefix(trimmed, "/")
+	return "op://" + trimmed
 }

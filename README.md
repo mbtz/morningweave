@@ -13,7 +13,7 @@ The Go CLI is the source of truth. Legacy Python packaging has been removed; use
 - Init config: `morningweave init`
 
 ## Requirements
-- Go 1.24+ (module-managed; toolchain auto-download is enabled)
+- Go 1.25.6+ (module-managed; toolchain auto-download is enabled)
 - macOS (primary), but intended to run on a home server as well
 
 ## Configuration overview
